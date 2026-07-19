@@ -1,0 +1,4 @@
+Django==4.2.11
+mysqlclient==2.2.4
+django-cors-headers==4.3.1
+redis==5.0.3

@@ -1,0 +1,9 @@
+# 强制关键文件使用 LF 行尾，避免 Windows CRLF 导致 Linux 容器执行 .sh 报错
+*.sh text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.html text eol=lf
+*.yml text eol=lf
+*.conf text eol=lf
+Dockerfile text eol=lf
+*.txt text eol=lf

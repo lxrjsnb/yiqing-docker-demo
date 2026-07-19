@@ -1,0 +1,79 @@
+# ============================================
+# 舆情系统多容器编排
+# 启动顺序：db / redis → backend → frontend（用 depends_on + healthcheck 控制）
+# 一条命令：docker-compose up -d
+# ============================================
+
+version: "3.9"
+
+services:
+
+  # ---------- 1. MySQL 数据库 ----------
+  db:
+    image: mysql:8.0
+    container_name: yiqing-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: yiqing
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"        # 宿主机用 3307，避免本机已装的 MySQL 占用 3306
+    volumes:
+      - mysql_data:/var/lib/mysql     # 数据持久化：容器删了数据还在
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---------- 2. Redis 缓存 ----------
+  redis:
+    image: redis:7-alpine
+    container_name: yiqing-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"        # 同理避免端口冲突
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---------- 3. Django 后端 ----------
+  backend:
+    build: ./backend
+    container_name: yiqing-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: yiqing
+      DB_USER: root
+      DB_PASSWORD: root123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      db:
+        condition: service_healthy       # 必须 MySQL 健康后才起 backend
+      redis:
+        condition: service_healthy
+
+  # ---------- 4. Vue3 前端（Nginx） ----------
+  frontend:
+    build: ./frontend
+    container_name: yiqing-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  redis_data:

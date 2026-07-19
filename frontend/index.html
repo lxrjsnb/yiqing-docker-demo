@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>AI 舆情监测系统 - Docker 部署演示</title>
+  <!-- 用 CDN 引入 Vue3，免去 npm build 步骤，最简单 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, "Microsoft YaHei", sans-serif;
+           background: #f5f7fa; color: #2c3e50; padding: 20px; }
+    .header { background: linear-gradient(135deg, #667eea, #764ba2);
+              color: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .header h1 { font-size: 22px; margin-bottom: 6px; }
+    .header p { opacity: 0.9; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .card { background: #fff; padding: 18px; border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .card .label { font-size: 12px; color: #909399; margin-bottom: 8px; }
+    .card .value { font-size: 16px; font-weight: 600; word-break: break-all; }
+    .card.ok .value { color: #67c23a; }
+    .card.err .value { color: #f56c6c; }
+    table { width: 100%; background: #fff; border-radius: 8px;
+            overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    th { background: #f0f2f5; padding: 12px; text-align: left; font-size: 13px; }
+    td { padding: 12px; border-top: 1px solid #ebeef5; font-size: 13px; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px;
+           font-size: 12px; color: #fff; }
+    .tag-low { background: #67c23a; }
+    .tag-mid { background: #e6a23c; }
+    .tag-high { background: #f56c6c; }
+    .pos { color: #67c23a; } .neg { color: #f56c6c; } .neu { color: #909399; }
+    .btn { background: #409eff; color: #fff; border: none; padding: 6px 14px;
+           border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn:hover { background: #66b1ff; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="header">
+      <h1>AI 多平台社交媒体舆情监测系统</h1>
+      <p>Docker 容器化部署演示 · 前端 Nginx + 后端 Django + MySQL + Redis</p>
+    </div>
+
+    <!-- 4 个状态卡片：直观看到每个容器是否正常 -->
+    <div class="grid">
+      <div :class="['card', hello.status]">
+        <div class="label">后端 Django</div>
+        <div class="value">{{ hello.msg || hello.err || '加载中...' }}</div>
+      </div>
+      <div :class="['card', db.status]">
+        <div class="label">MySQL 数据库</div>
+        <div class="value">{{ db.db_time || db.err || '加载中...' }}</div>
+      </div>
+      <div :class="['card', redis.status]">
+        <div class="label">Redis 访问计数</div>
+        <div class="value">{{ redis.visit_count ?? redis.err ?? '加载中...' }}</div>
+      </div>
+      <div class="card">
+        <div class="label">舆情数据</div>
+        <div class="value">{{ posts.count ?? 0 }} 条</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th><th>平台</th><th>作者</th><th>内容</th>
+          <th>情感</th><th>点赞</th><th>风险等级</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="p in posts.data" :key="p.id">
+          <td>{{ p.id }}</td>
+          <td>{{ p.platform }}</td>
+          <td>{{ p.author }}</td>
+          <td>{{ p.content }}</td>
+          <td :class="p.sentiment === '正面' ? 'pos' : p.sentiment === '负面' ? 'neg' : 'neu'">
+            {{ p.sentiment }}
+          </td>
+          <td>{{ p.likes }}</td>
+          <td>
+            <span :class="['tag', p.risk_level === '高' ? 'tag-high' : p.risk_level === '中' ? 'tag-mid' : 'tag-low']">
+              {{ p.risk_level }}
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top:16px; text-align:right;">
+      <button class="btn" @click="refresh">刷新数据</button>
+    </div>
+  </div>
+
+<script>
+const { createApp, reactive } = Vue;
+
+// 注意：这里用相对路径 /api/，nginx 会反向代理到 backend 容器
+createApp({
+  setup() {
+    const state = reactive({
+      hello: { status: '' }, db: { status: '' },
+      redis: { status: '' }, posts: {}
+    });
+
+    async function fetchAll() {
+      try {
+        const [h, d, r, p] = await Promise.all([
+          fetch('/api/hello/').then(r => r.json()),
+          fetch('/api/db/').then(r => r.json()),
+          fetch('/api/redis/').then(r => r.json()),
+          fetch('/api/posts/').then(r => r.json()),
+        ]);
+        state.hello = h.status === 'ok' ? { status: 'ok', msg: h.msg } : { status: 'err', err: h.msg };
+        state.db = d.status === 'ok' ? { status: 'ok', db_time: d.db_time } : { status: 'err', err: d.msg };
+        state.redis = r.status === 'ok' ? { status: 'ok', visit_count: r.visit_count } : { status: 'err', err: r.msg };
+        state.posts = p;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function refresh() { fetchAll(); }
+    fetchAll();
+
+    return { ...state, refresh, hello: state.hello, db: state.db,
+             redis: state.redis, posts: state.posts };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
