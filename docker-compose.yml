@@ -4,8 +4,6 @@
 # 一条命令：docker-compose up -d
 # ============================================
 
-version: "3.9"
-
 services:
 
   # ---------- 1. MySQL 数据库 ----------
@@ -65,12 +63,13 @@ services:
         condition: service_healthy
 
   # ---------- 4. Vue3 前端（Nginx） ----------
+  # 用 8080 宿主机端口（Codespaces 默认自动转发 1024+ 端口）
   frontend:
     build: ./frontend
     container_name: yiqing-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - backend
 
